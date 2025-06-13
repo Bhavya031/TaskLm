@@ -16,14 +16,13 @@ tar -C /opt -xzf nvim-linux-x86_64.tar.gz
 echo 'export PATH="$PATH:/opt/nvim-linux-x86_64/bin"' >> ~/.bashrc
 
 # Install Starship prompt
-curl -sS https://starship.rs/install.sh | sh
-
+curl -sS https://starship.rs/install.sh | sh -s -- --yes
 # Initialize Starship in bash
 echo 'eval "$(starship init bash)"' >> ~/.bashrc
 
 # Install yt-dlp using pip and also overwrite with latest binary
 pip install -U yt-dlp
-curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+curl -L https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2025.06.08.232939/yt-dlp -o /usr/local/bin/yt-dlp
 chmod +x /usr/local/bin/yt-dlp
 
 # Ensure ~/.config directory exists
