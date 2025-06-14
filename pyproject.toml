@@ -1,10 +1,11 @@
 [project]
-name = "tasklm"
+name = "taskmind"
 version = "0.1.0"
 description = "AI agent that creates folders and generates Python files based on prompts"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "firecrawl-py>=2.8.0",
     "flask>=3.1.1",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
@@ -14,4 +15,4 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["boiler_plate/pdf_utils", "boiler_plate/pdf-utils", "boiler_plate/pdf-processor", "boiler_plate/rclone_gdrive", "boiler_plate/firecrawl_boilerplate", "testing"]
+members = ["boiler_plate/pdf_utils", "boiler_plate/pdf-utils", "boiler_plate/pdf-processor", "boiler_plate/rclone_gdrive", "boiler_plate/firecrawl_boilerplate", "testing", "bot"]
