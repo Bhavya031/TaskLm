@@ -1,0 +1,59 @@
+# FFmpeg CUDA Processor Requirements
+# Core dependencies for GPU-accelerated media processing
+
+# No external Python dependencies required - uses only standard library
+# However, system dependencies are required:
+
+# System Requirements:
+# 1. FFmpeg with CUDA support
+# 2. NVIDIA GPU with CUDA capability
+# 3. NVIDIA drivers
+# 4. CUDA toolkit (optional but recommended)
+
+# Installation commands for different systems:
+
+# Ubuntu/Debian:
+# sudo apt update
+# sudo apt install ffmpeg nvidia-driver-xxx cuda-toolkit
+
+# macOS (with Homebrew):
+# brew install ffmpeg
+# Note: CUDA support on macOS is limited
+
+# Windows:
+# Download FFmpeg with CUDA support from official builds
+# Install NVIDIA drivers and CUDA toolkit
+
+# Verify installation:
+# ffmpeg -version | grep cuda
+# nvidia-smi
+
+# Optional Python packages for enhanced functionality:
+# These are not required but can enhance the experience
+
+# For progress bars and enhanced UI
+tqdm>=4.64.0
+
+# For configuration file support
+pyyaml>=6.0
+
+# For advanced logging
+coloredlogs>=15.0
+
+# For parallel processing enhancements
+joblib>=1.2.0
+
+# For image processing (thumbnails)
+Pillow>=9.0.0
+
+# For video analysis
+opencv-python>=4.7.0
+
+# For audio analysis
+librosa>=0.9.0
+
+# Development dependencies
+pytest>=7.0.0
+black>=22.0.0
+flake8>=5.0.0
+mypy>=0.991

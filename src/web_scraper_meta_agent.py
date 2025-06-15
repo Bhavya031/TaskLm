@@ -7,13 +7,28 @@ Uses GPT-4o to understand user scraping needs and collect target URLs.
 import os
 import json
 import logging
+import asyncio
 from typing import Dict, List, Optional
 from dataclasses import dataclass
+from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from web_page_analyzer import WebPageAnalyzer
+from goose_prompt_generator import generate_goose_prompt
+
+# Import goose automation with fallback
+try:
+    from goose import run_goose_automation
+except ImportError:
+    try:
+        import sys
+        sys.path.append('..')
+        from goose import run_goose_automation
+    except ImportError:
+        logger.error("Could not import goose.py - make sure it's in the correct path")
+        run_goose_automation = None
 
 # Load environment variables
 load_dotenv()
@@ -219,7 +234,13 @@ Current project info:
         
         welcome_message = """🕷️ Welcome to Web Scraper Meta Agent!
 
-I'll help you build a custom web scraper by understanding exactly what you need.
+I'll help you build a custom web scraper using AI automation:
+
+🎯 **What I do:**
+• Understand your scraping requirements
+• Analyze target websites
+• Generate optimized Goose prompts
+• Create complete scraper code automatically
 
 Tell me about your project - what are you trying to achieve? Are you:
 • Building a business tool?
@@ -227,7 +248,9 @@ Tell me about your project - what are you trying to achieve? Are you:
 • Monitoring competitors?
 • Collecting data for a personal project?
 
-I'm genuinely curious about your goals and what you're working on!"""
+I'm genuinely curious about your goals and what you're working on!
+
+💬 **Need general help?** Visit our main bot: @faltu031_bot"""
         
         await update.message.reply_text(welcome_message)
     
@@ -235,25 +258,36 @@ I'm genuinely curious about your goals and what you're working on!"""
         """Handle /help command"""
         help_text = """🕷️ Web Scraper Meta Agent Help
 
-I help you create custom web scrapers by:
+I help you create custom web scrapers using AI automation:
 
-🔍 **Step 1: Link Collection**
+🔍 **Step 1: Requirements Analysis**
 - Share URLs you want to scrape
-- I'll analyze and categorize them
+- I'll analyze page structure and data
+- Deep conversation about your needs
 
-🎯 **Step 2: Requirements Gathering**  
-- Define what data to extract
-- Set frequency and format preferences
-- Specify target elements
+🎯 **Step 2: Prompt Generation**  
+- Generate optimized Goose AI prompts
+- Include all technical specifications
+- Schema and requirements mapping
 
-⚡ **Step 3: Scraper Generation**
-- Generate custom scraping code
-- Provide ready-to-use solution
+🤖 **Step 3: Automated Scraper Creation**
+- Use Goose AI for code generation
+- Complete scraper with documentation
+- Ready-to-run solution
 
 **Commands:**
 • /start - Begin new scraping project
 • /status - Check current project status
 • /reset - Start over with new project
+• /testgoose - Check Goose availability
+
+**Features:**
+• AI-powered requirement analysis
+• Automatic code generation
+• Complete project documentation
+• Error handling and validation
+
+💬 **Need more help?** Visit @faltu031_bot
 
 Just paste URLs or describe what you want to scrape!"""
         
@@ -298,6 +332,54 @@ Just paste URLs or describe what you want to scrape!"""
         self.user_projects[user_id] = ScrapingProject(user_id=user_id)
         
         await update.message.reply_text("🔄 Project reset! Use /start to begin a new scraping project.")
+    
+    async def test_goose_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /testgoose command to check Goose availability"""
+        await update.message.reply_text("🔍 Testing Goose availability...")
+        
+        # Check if goose automation function is available
+        if run_goose_automation is None:
+            status_message = """❌ **Goose Module Status: Not Available**
+
+The goose.py module could not be imported.
+
+**Debug Info:**
+• Current working directory checked
+• Python path checked
+• Import paths verified
+
+🔧 **To fix this:**
+1. Make sure goose.py is in the same directory
+2. Check Python import paths
+3. Verify all dependencies
+
+💬 **Need help?** Visit @faltu031_bot"""
+        else:
+            # Test CLI availability
+            goose_available, goose_status = await self._check_goose_availability()
+            
+            if goose_available:
+                status_message = f"""✅ **Goose Status: Available**
+
+**Module:** ✅ goose.py imported successfully
+**CLI:** ✅ {goose_status}
+
+🚀 **Ready to generate scrapers!**
+Use /start to begin a new project."""
+            else:
+                status_message = f"""⚠️ **Goose Status: Partial**
+
+**Module:** ✅ goose.py imported successfully
+**CLI:** ❌ {goose_status}
+
+🔧 **To fix CLI issue:**
+1. Install Goose CLI tool
+2. Make sure it's in your PATH
+3. Test with: `goose --version`
+
+💬 **Need help?** Visit @faltu031_bot"""
+        
+        await update.message.reply_text(status_message, parse_mode='Markdown')
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle user messages with GPT-4o analysis"""
@@ -390,23 +472,7 @@ Just paste URLs or describe what you want to scrape!"""
                 if len(secondary_data) > 5:
                     details_message += f"\n• ... and {len(secondary_data) - 5} more fields"
             
-            # Add technical requirements
-            if tech_requirements:
-                details_message += f"\n\n⚙️ **Technical Specifications:**"
-                details_message += f"\n• **Method:** {tech_requirements.get('scraping_method', 'Standard HTTP scraping')}"
-                details_message += f"\n• **Complexity:** {tech_requirements.get('complexity_level', 'Medium').title()}"
-                details_message += f"\n• **Setup Time:** {tech_requirements.get('estimated_setup_time', '2-4 hours')}"
-                
-                considerations = tech_requirements.get('special_considerations', [])
-                if considerations:
-                    details_message += f"\n• **Special Handling:** {', '.join(considerations)}"
-            
-            # Add next steps
-            next_steps = analysis.get("next_steps", [])
-            if next_steps:
-                details_message += f"\n\n🚀 **What Happens Next:**"
-                for i, step in enumerate(next_steps, 1):
-                    details_message += f"\n{i}. {step}"
+
             
             await update.message.reply_text(details_message, parse_mode='Markdown')
         
@@ -572,6 +638,18 @@ Continue our conversation to build your scraper!"""
             await self._handle_project_questions(query, project)
         elif query.data == "show_full_schema":
             await self._show_full_schema(query, project)
+        elif query.data == "view_goose_prompt":
+            await self._show_goose_prompt(query, project)
+        elif query.data == "copy_prompt":
+            await self._handle_copy_prompt(query, project)
+        elif query.data == "use_with_goose":
+            await self._handle_use_with_goose(query, project)
+        elif query.data == "back_to_summary":
+            await self._handle_back_to_summary(query, project)
+        elif query.data == "generate_scraper":
+            await self._handle_generate_scraper(query, project)
+        elif query.data == "view_file_details":
+            await self._handle_view_file_details(query, project)
     
     async def _handle_project_confirmation(self, query, project: ScrapingProject):
         """Handle project confirmation"""
@@ -579,19 +657,22 @@ Continue our conversation to build your scraper!"""
 
 Perfect! Your web scraping project is ready for implementation.
 
+🤖 **Goose Prompt Generated:** I've created an optimized prompt for Goose AI automation based on your requirements.
+
 🚀 **What happens next:**
-1. I'll generate custom scraper code based on your requirements
-2. You'll receive a complete solution with documentation
+1. Use the generated Goose prompt for AI automation
+2. Get a complete scraper solution with documentation
 3. The scraper will be tested with your target URLs
-4. You'll get usage examples and deployment instructions
+4. Receive usage examples and deployment instructions
 
-📧 **Your project summary has been saved and will be used to create your custom scraper.**
+📧 **Your project summary and Goose prompt have been saved and are ready to use.**
 
-Would you like me to proceed with generating the scraper code now?"""
+Choose your next step:"""
         
         # Create next action buttons
         keyboard = [
             [InlineKeyboardButton("🔥 Generate Scraper Now!", callback_data="generate_scraper")],
+            [InlineKeyboardButton("🤖 View Goose Prompt", callback_data="view_goose_prompt")],
             [InlineKeyboardButton("💾 Save for Later", callback_data="save_project")],
             [InlineKeyboardButton("📄 Export Summary", callback_data="export_summary")]
         ]
@@ -604,6 +685,63 @@ Would you like me to proceed with generating the scraper code now?"""
         )
         
         project.status = "confirmed_ready_for_generation"
+        
+        # Generate goose prompt based on project details
+        await self._generate_and_store_goose_prompt(project)
+    
+    async def _generate_and_store_goose_prompt(self, project: ScrapingProject):
+        """Generate goose prompt from project details and store it"""
+        try:
+            # Extract project details for goose prompt generation
+            final_analysis = project.data_requirements.get("final_analysis", {})
+            project_summary = final_analysis.get("project_summary", {})
+            data_schema = final_analysis.get("data_schema", {})
+            tech_requirements = final_analysis.get("technical_requirements", {})
+            
+            # Create detailed user request string for goose prompt generation
+            user_request = f"""
+Build a web scraper with the following specifications:
+
+PROJECT DETAILS:
+- Project Name: {project_summary.get('project_name', 'Web Scraping Project')}
+- Objective: {project_summary.get('objective', 'Extract data from websites')}
+- Target Websites: {', '.join(project_summary.get('target_websites', []))}
+- Use Case: {project_summary.get('use_case', 'Data analysis')}
+- Frequency: {project_summary.get('frequency', 'As needed')}
+
+TARGET URLS:
+{chr(10).join([f"- {url}" for url in project.target_urls])}
+
+DATA SCHEMA TO EXTRACT:
+Primary Data Fields:
+{chr(10).join([f"- {field.get('field_name', 'unknown')} ({field.get('data_type', 'string')}): {field.get('description', 'No description')}" for field in data_schema.get('primary_data', [])])}
+
+Secondary Data Fields:
+{chr(10).join([f"- {field.get('field_name', 'unknown')} ({field.get('data_type', 'string')}): {field.get('description', 'No description')}" for field in data_schema.get('secondary_data', [])])}
+
+TECHNICAL REQUIREMENTS:
+- Scraping Method: {tech_requirements.get('scraping_method', 'Standard HTTP scraping')}
+- Complexity Level: {tech_requirements.get('complexity_level', 'Medium')}
+- Special Considerations: {', '.join(tech_requirements.get('special_considerations', ['Standard handling']))}
+- Output Format: JSON with structured data
+
+Please create a complete, production-ready web scraper that can extract this data reliably and efficiently.
+""".strip()
+
+            # Generate goose prompt
+            logger.info("Generating goose prompt for confirmed project...")
+            goose_prompt = generate_goose_prompt(user_request)
+            
+            if goose_prompt:
+                # Store the goose prompt in project data
+                project.data_requirements["goose_prompt"] = goose_prompt
+                project.data_requirements["goose_user_request"] = user_request
+                logger.info("Goose prompt generated and stored successfully")
+            else:
+                logger.error("Failed to generate goose prompt")
+                
+        except Exception as e:
+            logger.error(f"Error generating goose prompt: {e}")
     
     async def _handle_project_modification(self, query, project: ScrapingProject):
         """Handle project modification request"""
@@ -732,6 +870,516 @@ This is the full structure of data you'll receive from your scraper:
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+    
+    async def _show_goose_prompt(self, query, project: ScrapingProject):
+        """Show the generated goose prompt"""
+        
+        goose_prompt = project.data_requirements.get("goose_prompt")
+        
+        if not goose_prompt:
+            await query.edit_message_text(
+                "🤖 **Goose Prompt Not Available**\n\nThe goose prompt hasn't been generated yet. Please confirm your project first to generate the optimized prompt.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Truncate prompt if too long for Telegram
+        if len(goose_prompt) > 3500:  # Leave room for formatting
+            prompt_preview = goose_prompt[:3500] + "\n\n... [TRUNCATED - Full prompt available in project data]"
+        else:
+            prompt_preview = goose_prompt
+        
+        goose_message = f"""🤖 **GENERATED GOOSE PROMPT**
+
+This optimized prompt can be used with Goose AI automation to build your web scraper:
+
+```
+{prompt_preview}
+```
+
+💡 **How to use:**
+1. Copy this prompt
+2. Use it with Goose AI automation
+3. Goose will generate the complete scraper code
+4. Follow the implementation steps provided
+
+🎯 **This prompt contains all your project requirements and technical specifications for optimal results.**"""
+        
+        keyboard = [
+            [InlineKeyboardButton("📋 Copy Prompt", callback_data="copy_prompt")],
+            [InlineKeyboardButton("🚀 Use with Goose", callback_data="use_with_goose")],
+            [InlineKeyboardButton("↩️ Back to Summary", callback_data="back_to_summary")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            goose_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    async def _handle_copy_prompt(self, query, project: ScrapingProject):
+        """Handle copy prompt request"""
+        goose_prompt = project.data_requirements.get("goose_prompt")
+        
+        if goose_prompt:
+            # For Telegram, we can't directly copy to clipboard, so show instructions
+            copy_message = f"""📋 **Copy Goose Prompt**
+
+Here's your complete goose prompt ready to copy:
+
+```
+{goose_prompt}
+```
+
+💡 **Instructions:**
+1. Select and copy the text above
+2. Paste it into your Goose AI automation tool
+3. Run the automation to generate your scraper
+
+📧 The prompt has been optimized for best results with Goose."""
+            
+            keyboard = [[InlineKeyboardButton("↩️ Back", callback_data="view_goose_prompt")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                copy_message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.answer("❌ No prompt available", show_alert=True)
+    
+    async def _handle_use_with_goose(self, query, project: ScrapingProject):
+        """Handle using prompt with Goose automation"""
+        use_message = f"""🚀 **Using with Goose Automation**
+
+Your project is ready for Goose AI automation!
+
+🎯 **What you'll get:**
+• Complete web scraper code
+• Requirements.txt file
+• Documentation
+• Usage examples
+• Error handling
+• Data validation
+
+📋 **Steps to use:**
+1. Copy the generated prompt
+2. Open your Goose AI automation tool
+3. Paste the prompt and run
+4. Follow the generated implementation
+
+⚡ **The prompt contains all technical specifications and requirements for optimal scraper generation.**
+
+Ready to proceed?"""
+        
+        keyboard = [
+            [InlineKeyboardButton("📋 Get Prompt", callback_data="copy_prompt")],
+            [InlineKeyboardButton("🤖 View Prompt", callback_data="view_goose_prompt")],
+            [InlineKeyboardButton("↩️ Back to Summary", callback_data="back_to_summary")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            use_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    async def _handle_back_to_summary(self, query, project: ScrapingProject):
+        """Handle back to summary navigation"""
+        # Recreate the confirmation message and buttons
+        confirmation_message = f"""✅ **Project Confirmed!**
+
+Perfect! Your web scraping project is ready for implementation.
+
+🚀 **What happens next:**
+1. I'll generate custom scraper code based on your requirements
+2. You'll receive a complete solution with documentation
+3. The scraper will be tested with your target URLs
+4. You'll get usage examples and deployment instructions
+
+📧 **Your project summary has been saved and will be used to create your custom scraper.**
+
+Would you like me to proceed with generating the scraper code now?"""
+        
+        # Create next action buttons
+        keyboard = [
+            [InlineKeyboardButton("🔥 Generate Scraper Now!", callback_data="generate_scraper")],
+            [InlineKeyboardButton("🤖 View Goose Prompt", callback_data="view_goose_prompt")],
+            [InlineKeyboardButton("💾 Save for Later", callback_data="save_project")],
+            [InlineKeyboardButton("📄 Export Summary", callback_data="export_summary")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            confirmation_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    async def _handle_generate_scraper(self, query, project: ScrapingProject):
+        """Handle scraper generation using Goose automation with step tracking"""
+        
+        # Check if goose prompt is available
+        goose_prompt = project.data_requirements.get("goose_prompt")
+        if not goose_prompt:
+            await query.edit_message_text(
+                "❌ **No Goose prompt available**\n\nPlease confirm your project first to generate the required prompt.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        try:
+            # Step 0: Check if goose automation function is available
+            if run_goose_automation is None:
+                error_message = """❌ **Goose Module Not Available**
+
+The goose.py module could not be imported.
+
+🔧 **To fix this:**
+1. Make sure goose.py is in the same directory
+2. Check that all imports are working
+3. Verify Python path configuration
+
+🤖 **Need help?** Visit @faltu031_bot"""
+                
+                keyboard = [
+                    [InlineKeyboardButton("💬 Get Help @faltu031_bot", url="https://t.me/faltu031_bot")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
+                return
+            
+            # Step 1: Check Goose availability
+            await self._update_generation_status(query, "🔍 **Step 1:** Checking Goose availability...")
+            
+            goose_available, goose_error = await self._check_goose_availability()
+            if not goose_available:
+                error_message = f"""❌ **Goose Not Available**
+
+{goose_error}
+
+🔧 **To fix this:**
+1. Install Goose: `pip install goose-ai`
+2. Make sure Goose is in your PATH
+3. Test with: `goose --version`
+
+🤖 **Need help?** Visit @faltu031_bot"""
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Try Again", callback_data="generate_scraper")],
+                    [InlineKeyboardButton("💬 Get Help @faltu031_bot", url="https://t.me/faltu031_bot")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(error_message, reply_markup=reply_markup, parse_mode='Markdown')
+                return
+            
+            # Step 2: Starting Goose session
+            await self._update_generation_status(query, "🚀 **Step 2:** Starting Goose session...")
+            await asyncio.sleep(2)  # Let user see the step
+            
+            # Step 3: Sending prompt
+            await self._update_generation_status(query, "📝 **Step 3:** Sending optimized prompt to Goose...")
+            await asyncio.sleep(2)
+            
+            # Step 4: Generation in progress
+            await self._update_generation_status(query, "⚙️ **Step 4:** Goose is generating your scraper...\n\n⏳ This may take 30-90 seconds")
+            
+            # Run goose automation in a separate thread to avoid blocking
+            import concurrent.futures
+            
+            # Create executor for running blocking goose automation
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                logger.info("Starting Goose automation for scraper generation...")
+                
+                # Run the goose automation in thread
+                future = executor.submit(
+                    run_goose_automation,
+                    goose_prompt, 
+                    ['*.py', '*.txt', '*.md', '*.json']
+                )
+                
+                # Wait with timeout and periodic updates
+                timeout_seconds = 120  # 2 minutes timeout
+                elapsed = 0
+                
+                while elapsed < timeout_seconds:
+                    if future.done():
+                        break
+                    
+                    await asyncio.sleep(5)
+                    elapsed += 5
+                    
+                    # Update progress every 15 seconds
+                    if elapsed % 15 == 0:
+                        progress_msg = f"⚙️ **Step 4:** Goose is generating your scraper...\n\n⏳ Time elapsed: {elapsed}s / {timeout_seconds}s\n\n*Please wait, generation in progress...*"
+                        await self._update_generation_status(query, progress_msg)
+                
+                # Get result
+                if future.done():
+                    success, generated_file = future.result()
+                else:
+                    # Timeout
+                    await self._update_generation_status(query, "⏰ **Timeout:** Goose is taking longer than expected...")
+                    success, generated_file = False, None
+            
+            # Step 5: Processing results
+            await self._update_generation_status(query, "🔍 **Step 5:** Processing generation results...")
+            await asyncio.sleep(1)
+            
+            if success and generated_file:
+                # Success message with file info
+                success_message = f"""✅ **Scraper Generated Successfully!**
+
+🎉 Your custom web scraper has been created!
+
+📁 **Generated File:** `{generated_file.name}`
+📂 **Location:** `{generated_file.parent}`
+
+🚀 **What's included:**
+• Complete web scraper code
+• Requirements and dependencies
+• Usage instructions
+• Error handling
+• Data validation
+
+🤖 **Ready to use your scraper?**
+Check the generated file and follow the instructions to start scraping!
+
+---
+
+💬 **Need more help?** Visit our main bot: @faltu031_bot"""
+                
+                keyboard = [
+                    [InlineKeyboardButton("📁 View File Details", callback_data="view_file_details")],
+                    [InlineKeyboardButton("🔄 Generate Another", callback_data="reset_project")],
+                    [InlineKeyboardButton("💬 Chat with @faltu031_bot", url="https://t.me/faltu031_bot")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    success_message,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                
+                # Update project status
+                project.status = "scraper_generated"
+                project.data_requirements["generated_file"] = str(generated_file)
+                
+                logger.info(f"Scraper generated successfully: {generated_file}")
+                
+            else:
+                # Generation failed
+                failure_message = f"""❌ **Scraper Generation Failed**
+
+😞 I encountered an issue while generating your scraper.
+
+**Possible causes:**
+• Goose session timeout or disconnection
+• Network connectivity issues
+• Goose service unavailable
+• Complex prompt requiring manual intervention
+
+🔧 **What you can try:**
+• Check your internet connection
+• Verify Goose is properly installed and running
+• Try generating again in a few minutes
+• Use the generated prompt manually with Goose
+
+🤖 **Need help?** Visit our main bot: @faltu031_bot
+
+The generated prompt is still available if you want to try manually or with other tools."""
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Try Again", callback_data="generate_scraper")],
+                    [InlineKeyboardButton("🤖 View Goose Prompt", callback_data="view_goose_prompt")],
+                    [InlineKeyboardButton("💬 Get Help @faltu031_bot", url="https://t.me/faltu031_bot")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    failure_message,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                
+                logger.error("Scraper generation failed")
+                
+        except Exception as e:
+            logger.error(f"Error during scraper generation: {e}")
+            
+            # Escape error message for Markdown
+            error_msg = str(e).replace('`', '').replace('*', '').replace('_', '').replace('[', '').replace(']', '')
+            
+            error_message = f"""💥 **Unexpected Error**
+
+An error occurred during scraper generation:
+```
+{error_msg}
+```
+
+**Debug Information:**
+• Error Type: {type(e).__name__}
+• Step: Goose automation process
+
+🔧 **What you can try:**
+• Try again in a few minutes
+• Check the logs for more details
+• Verify Goose installation
+• Use the Goose prompt manually
+
+🤖 **Need assistance?** Visit: @faltu031_bot"""
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Try Again", callback_data="generate_scraper")],
+                [InlineKeyboardButton("🤖 View Goose Prompt", callback_data="view_goose_prompt")],
+                [InlineKeyboardButton("💬 Get Support @faltu031_bot", url="https://t.me/faltu031_bot")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                error_message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+    
+    async def _update_generation_status(self, query, status_message: str):
+        """Update the user with current generation status"""
+        try:
+            await query.edit_message_text(status_message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error updating status: {e}")
+    
+    async def _check_goose_availability(self) -> tuple[bool, str]:
+        """Check if Goose is available and properly configured"""
+        try:
+            # First try the common installation path
+            goose_path = "/Users/bhavya/.local/bin/goose"
+            
+            if Path(goose_path).exists():
+                goose_cmd = goose_path
+            else:
+                # Try to find goose in PATH using which command
+                try:
+                    result = await asyncio.create_subprocess_exec(
+                        'which', 'goose',
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await result.communicate()
+                    
+                    if result.returncode == 0:
+                        goose_cmd = 'goose'
+                    else:
+                        return False, "Goose executable not found in PATH or expected location"
+                except Exception as e:
+                    return False, f"Error searching for Goose: {str(e)}"
+            
+            # Try to run goose --version to verify it works
+            try:
+                version_result = await asyncio.create_subprocess_exec(
+                    goose_cmd, '--version',
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                version_stdout, version_stderr = await version_result.communicate()
+                
+                if version_result.returncode == 0:
+                    version_info = version_stdout.decode().strip()
+                    return True, f"Goose available: {version_info}"
+                else:
+                    error_msg = version_stderr.decode().strip() if version_stderr else "Unknown error"
+                    return False, f"Goose found but not working: {error_msg}"
+                    
+            except Exception as e:
+                return False, f"Error testing Goose: {str(e)}"
+                
+        except Exception as e:
+            return False, f"Error checking Goose: {str(e)}"
+    
+    async def _handle_view_file_details(self, query, project: ScrapingProject):
+        """Handle viewing file details of generated scraper"""
+        
+        generated_file_path = project.data_requirements.get("generated_file")
+        if not generated_file_path:
+            await query.edit_message_text(
+                "❌ **No generated file found**\n\nPlease generate a scraper first.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        try:
+            from pathlib import Path
+            generated_file = Path(generated_file_path)
+            
+            if not generated_file.exists():
+                await query.edit_message_text(
+                    f"❌ **File not found**\n\nThe file `{generated_file.name}` could not be located.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            # Get file info
+            file_size = generated_file.stat().st_size
+            file_extension = generated_file.suffix
+            
+            # Read first few lines of the file for preview
+            try:
+                with open(generated_file, 'r', encoding='utf-8') as f:
+                    content_lines = f.readlines()
+                    preview_lines = content_lines[:10]  # First 10 lines
+                    preview = ''.join(preview_lines)
+                    if len(content_lines) > 10:
+                        preview += f"\n... ({len(content_lines) - 10} more lines)"
+            except Exception as e:
+                preview = f"Could not read file content: {e}"
+            
+            details_message = f"""📁 **Generated File Details**
+
+**File Information:**
+• **Name:** `{generated_file.name}`
+• **Type:** `{file_extension}` file
+• **Size:** {file_size} bytes
+• **Lines:** {len(content_lines) if 'content_lines' in locals() else 'Unknown'}
+• **Location:** `{generated_file.parent}`
+
+**Content Preview:**
+```python
+{preview[:800]}{'...' if len(preview) > 800 else ''}
+```
+
+🚀 **How to use:**
+1. Navigate to the file location
+2. Install requirements: `pip install -r requirements.txt`
+3. Run the scraper: `python {generated_file.name}`
+4. Follow any additional instructions in the file
+
+💬 **Need help?** Visit @faltu031_bot for support!"""
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Generate Another", callback_data="reset_project")],
+                [InlineKeyboardButton("↩️ Back", callback_data="generate_scraper")],
+                [InlineKeyboardButton("💬 Chat @faltu031_bot", url="https://t.me/faltu031_bot")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                details_message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error viewing file details: {e}")
+            await query.edit_message_text(
+                f"❌ **Error viewing file details**\n\n`{str(e)}`\n\n💬 Visit @faltu031_bot for help!",
+                parse_mode='Markdown'
+            )
     
     async def _reset_project_inline(self, query):
         """Reset project inline"""
@@ -922,6 +1570,7 @@ Feel free to ask about:
         app.add_handler(CommandHandler("help", self.help_command))
         app.add_handler(CommandHandler("status", self.status_command))
         app.add_handler(CommandHandler("reset", self.reset_command))
+        app.add_handler(CommandHandler("testgoose", self.test_goose_command))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         app.add_handler(CallbackQueryHandler(self.handle_callback))
         
