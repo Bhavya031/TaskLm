@@ -6,7 +6,7 @@ https://github.com/user-attachments/assets/c9d39b8d-2026-4ded-9688-36a95e790998
 
 | [![Demo 1](https://img.youtube.com/vi/T4W0Y_quT7A/0.jpg)](https://www.youtube.com/watch?v=T4W0Y_quT7A) | [![Demo 2](https://img.youtube.com/vi/1kjYtHB1N2k/0.jpg)](https://www.youtube.com/watch?v=1kjYtHB1N2k) |
 |:--:|:--:|
-| [Watch Agent Demo](https://www.youtube.com/watch?v=T4W0Y_quT7A) | [Watch Transcription Demo](https://www.youtube.com/watch?v=1kjYtHB1N2k) |
+|[Trea Agent Demo](https://youtu.be/1kjYtHB1N2k?t=331) | [TaskMind Presentation](https://www.youtube.com/watch?v=T4W0Y_quT7A)|
 > **Intelligent Problem-Solving Through Specialized AI Agents**
 
 TaskMind is a sophisticated multi-agent AI system that intelligently routes user problems to specialized agents, each equipped with powerful boilerplate code for rapid solution deployment. Built with intelligence and Telegram integration, it creates a seamless experience for complex technical tasks.
